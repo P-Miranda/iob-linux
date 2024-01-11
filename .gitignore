@@ -19,3 +19,8 @@
 /software/OS_build
 !/submodules
 /submodules/*/*
+
+software/linux_drivers/*/*
+!software/linux_drivers/*/Makefile
+!software/linux_drivers/*/*.c
+software/linux_drivers/*/*.mod.c
