@@ -30,3 +30,4 @@ $(ROOTFS_DIR):
 
 clean:
 	make -C $(LINUX_KERNEL_DIR) M=$(PWD) clean
+	@rm -rf $(DST_DIR)
