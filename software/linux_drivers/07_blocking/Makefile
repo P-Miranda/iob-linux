@@ -1,4 +1,5 @@
-obj-m += chardev2.o
+obj-m += sleep.o
+obj-m += completions.o
 
 LINUX_KERNEL_DIR = ../../../submodules/linux-5.15.98
 
@@ -8,7 +9,7 @@ CROSS_COMPILE_OPS += "CROSS_COMPILE=riscv64-unknown-linux-gnu-"
 
 # Linux Kernel Module variables in target Rootfs
 ROOTFS_DIR = ../../../submodules/busybox/_install
-DST_DIR = $(ROOTFS_DIR)/chardev2
+DST_DIR = $(ROOTFS_DIR)/blocking
 # path to ROOTFS_DST_DIR starting from ROOTFS_DIR
 ROOTFS_DST_DIR = ../../../software/OS_build
 

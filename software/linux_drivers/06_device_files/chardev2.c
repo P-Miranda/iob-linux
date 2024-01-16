@@ -1,10 +1,10 @@
 /*
  * chardev2.c - Create an input/output character device
-* 1. insert module: sudo insmod chardev.ko
+* 1. insert module: sudo insmod chardev2.ko
 * 2. manually create char device: sudo mknod /dev/char_dev c [major] 0
 * NOTE: [major] is defined in chardev.h
-* 3. run user application for ioctl commands
-* 4. access /dev/char_dev with echo or cat
+* 3. run user application for ioctl commands: ./user/userspace_ioctl
+* 4. access /dev/char_dev with echo or cat: [echo|cat] /dev/char_dev
 */
 
 #include <linux/atomic.h>
