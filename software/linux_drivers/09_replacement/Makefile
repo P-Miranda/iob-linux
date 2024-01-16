@@ -1,5 +1,4 @@
 obj-m += print_string.o
-obj-m += kbleds.o
 
 LINUX_KERNEL_DIR = ../../../submodules/linux-5.15.98
 
