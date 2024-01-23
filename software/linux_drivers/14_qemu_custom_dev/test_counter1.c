@@ -1,14 +1,16 @@
 /* test_counter1.c: mock driver for test counter
  * does not actually access hardware:
- * 1. add kernel module: insmod test_counter1.ko
- * 2. add device file: mknod /dev/test_counter c [major] 0
- *   2.1 [major] is defined in cat /proc/devices | grep test_counter
- * 3. read device: cat /dev/test_counter
- * 4. write to device: echo "1" > /dev/test_counter
- *  4.1: reset: echo "0" > /dev/test_counter
- *  4.2: increment: echo "1" > /dev/test_counter
- *  4.3: sample: echo "2" > /dev/test_counter
- *  4.4: set: echo "[3-9]" > /dev/test_counter
+ * Option 1: run user1.sh script: sh user1.sh
+ * Option 2: manually run commands: 
+ *   1. add kernel module: insmod test_counter1.ko
+ *   2. add device file: mknod /dev/test_counter c [major] 0
+ *     2.1 [major] is defined in cat /proc/devices | grep test_counter
+ *   3. read device: cat /dev/test_counter
+ *   4. write to device: echo "1" > /dev/test_counter
+ *    4.1: reset: echo "0" > /dev/test_counter
+ *    4.2: increment: echo "1" > /dev/test_counter
+ *    4.3: sample: echo "2" > /dev/test_counter
+ *    4.4: set: echo "[3-9]" > /dev/test_counter
  */
 #include <linux/cdev.h>
 #include <linux/fs.h>
@@ -48,19 +50,6 @@ static void test_counter_reset(void) {
 static ssize_t test_counter_read(struct file *file, char __user *buf,
                                  size_t count, loff_t *ppos) {
   int size = 0;
-
-  // switch (*ppos) {
-  // case REG_ID:
-  //   pr_info("ID: %d", test_counter_data.id);
-  //   break;
-  // case REG_DATA:
-  //   pr_info("Sampled data: %d", test_counter_data.data);
-  //   break;
-  // default:
-  //   // do nothing
-  //   return 0;
-  //   break;
-  // }
 
   /* check if EOF */
   if (*ppos > 0)

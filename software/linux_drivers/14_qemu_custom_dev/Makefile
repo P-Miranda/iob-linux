@@ -1,4 +1,5 @@
 obj-m += test_counter1.o
+obj-m += test_counter2.o
 
 LINUX_KERNEL_DIR = ../../../submodules/linux-5.15.98
 
@@ -12,10 +13,13 @@ DST_DIR = $(ROOTFS_DIR)/test_counter
 # path to ROOTFS_DST_DIR starting from ROOTFS_DIR
 ROOTFS_DST_DIR = ../../../software/OS_build
 
-all: compile-driver add-to-rootfs
+all: compile-driver compile-userapp add-to-rootfs
 
 compile-driver:
 	make -C $(LINUX_KERNEL_DIR) $(CROSS_COMPILE_OPS) M=$(PWD) modules
+
+compile-userapp:
+	make -C ./user all
 
 add-to-rootfs: $(DST_DIR)
 	cp -r ./ $(DST_DIR)/
@@ -28,6 +32,9 @@ $(DST_DIR): $(ROOTFS_DIR)
 $(ROOTFS_DIR):
 	make -C ../../../ build-rootfs
 
-clean:
+clean-userapp:
+	make -C ./user clean
+
+clean: clean-userapp
 	make -C $(LINUX_KERNEL_DIR) M=$(PWD) clean
 	@rm -rf $(DST_DIR)
