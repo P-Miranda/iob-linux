@@ -5,15 +5,12 @@
  * 2. run user app: ./user/user
  */
 
-// TODO:
-// 1. user app to test all regs and functions (emulate user.sh)
-
 #include <linux/cdev.h>
 #include <linux/fs.h>
+#include <linux/io.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/uaccess.h>
-#include <linux/io.h>
 
 #include "test_counter2.h"
 
@@ -27,9 +24,6 @@
 static struct {
   dev_t devnum;
   struct cdev cdev;
-  // unsigned int id;
-  // unsigned int counter;
-  // unsigned int data;
   void __iomem *regbase;
 } test_counter_data;
 
@@ -46,23 +40,22 @@ static ssize_t test_counter_read(struct file *file, char __user *buf,
   int size = REG_SIZE;
   u32 value = 0;
 
-  /* check if EOF */
-  if (*ppos > 0)
-    return 0;
-
   /* read value from register */
   switch (*ppos) {
   case REG_ID:
     value = test_counter_read_reg(REG_ID);
+    pr_info("[Driver] Read ID!\n");
     break;
   case REG_DATA:
     value = test_counter_read_reg(REG_DATA);
+    pr_info("[Driver] Read sampled data!\n");
     break;
   default:
-    value = -1;
+    // invalid address - no bytes read
+    return 0;
   }
 
-  pr_info("ADDR: %x\tValue: %d\n", (unsigned int) *ppos, value);
+  // pr_info("[Driver] ADDR: 0x%x\tValue: 0x%x\n", (unsigned int)*ppos, value);
 
   // Read min between count and REG_SIZE
   if (size > count)
@@ -100,23 +93,25 @@ static ssize_t test_counter_write(struct file *file, const char __user *buf,
   case REG_RST: // reset counter
     test_counter_write_reg(0x1, REG_RST);
     test_counter_write_reg(0x0, REG_RST);
-    pr_info("Reset counter!\n");
+    pr_info("[Driver] Reset counter!\n");
     break;
   case REG_INCR: // increment counter
     test_counter_write_reg(0x1, REG_INCR);
-    pr_info("Increment counter!\n");
+    pr_info("[Driver] Increment counter!\n");
     break;
   case REG_SAMPLE: // sample counter
     test_counter_write_reg(0x1, REG_SAMPLE);
-    pr_info("Sample counter!\n");
+    pr_info("[Driver] Sample counter!\n");
     break;
   case REG_SET: // set counter
     u32 value = char_to_u32(kbuf);
     test_counter_write_reg(value, REG_SET);
-    pr_info("Set counter to %d!\n", value);
+    pr_info("[Driver] Set counter to 0x%x!\n", value);
     break;
   default:
-    pr_info("Invalid write address %x\n", (unsigned int) *ppos);
+    pr_info("[Driver] Invalid write address 0x%x\n", (unsigned int)*ppos);
+    // invalid address - no bytes written
+    return 0;
   }
 
   return size;
@@ -128,6 +123,8 @@ static ssize_t test_counter_write(struct file *file, const char __user *buf,
  */
 loff_t test_counter_llseek(struct file *filp, loff_t offset, int whence) {
   loff_t new_pos = -1;
+
+  // pr_info("[Driver] Lseek: offset %lld, whence %d\n", offset, whence);
 
   switch (whence) {
   case SEEK_SET:
@@ -192,7 +189,7 @@ static int __init test_counter_init(void) {
     goto ret_err_cdev_add;
   }
 
-  pr_info("%s: initialized.\n", DRIVER_NAME);
+  pr_info("[Driver] %s: initialized.\n", DRIVER_NAME);
   goto ret_ok;
 
 ret_err_cdev_add:
@@ -211,7 +208,7 @@ static void __exit test_counter_exit(void) {
   unregister_chrdev_region(test_counter_data.devnum, 1);
   iounmap(test_counter_data.regbase);
   release_mem_region(TEST_COUNTER_BASE, TEST_COUNTER_SIZE);
-  pr_info("%s: exiting.\n", DRIVER_NAME);
+  pr_info("[Driver] %s: exiting.\n", DRIVER_NAME);
 }
 
 module_init(test_counter_init);
