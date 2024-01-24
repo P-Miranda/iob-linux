@@ -1,30 +1,27 @@
-/* test_counter2.c: driver for test counter
- * hardcoded hardware access:
+/* test_counter3.c: driver for test counter
+ * using device platform. No hardcoded hardware address:
  * 1. setup driver: load lkm driver + add /dev/ file
- *      ./setup.sh 2
+ *      ./setup.sh 3
  * 2. run user app: ./user/user
  */
 
 #include <linux/cdev.h>
 #include <linux/fs.h>
 #include <linux/io.h>
+#include <linux/ioport.h>
 #include <linux/kernel.h>
+#include <linux/mod_devicetable.h>
 #include <linux/module.h>
+#include <linux/platform_device.h>
 #include <linux/uaccess.h>
 
 #include "test_counter.h"
-
-/* Same base and size from device tree.
- * Using hardcoded values for now.
- * This will be improved in a later version.
- */
-#define TEST_COUNTER_BASE 0x8000000
-#define TEST_COUNTER_SIZE 0x100
 
 static struct {
   dev_t devnum;
   struct cdev cdev;
   void __iomem *regbase;
+  resource_size_t regsize;
 } test_counter_data;
 
 static u32 test_counter_read_reg(u32 addr) {
@@ -141,7 +138,7 @@ loff_t test_counter_llseek(struct file *filp, loff_t offset, int whence) {
   }
 
   // Check for valid bounds
-  if (new_pos < 0 || new_pos > TEST_COUNTER_SIZE) {
+  if (new_pos < 0 || new_pos > test_counter_data.regsize) {
     return -EINVAL;
   }
 
@@ -158,22 +155,29 @@ static const struct file_operations test_counter_fops = {
     .llseek = test_counter_llseek,
 };
 
-static int __init test_counter_init(void) {
+static int test_counter_probe(struct platform_device *pdev) {
+  struct resource *res;
   int result = 0;
 
-  if (!request_mem_region(TEST_COUNTER_BASE, TEST_COUNTER_SIZE, DRIVER_NAME)) {
-    pr_err("%s: Error requesting I/O!\n", DRIVER_NAME);
-    result = -EBUSY;
-    goto ret_err_request_mem_region;
+  pr_info("[Driver] %s: probing.\n", DRIVER_NAME);
+
+  // Get the I/O region base address
+  res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+  if (!res) {
+    pr_err("[Driver]: Failed to get I/O resource!\n");
+    result = -ENODEV;
+    goto ret_platform_get_resource;
   }
 
-  test_counter_data.regbase = ioremap(TEST_COUNTER_BASE, TEST_COUNTER_SIZE);
-  if (!test_counter_data.regbase) {
-    pr_err("%s: Error mapping I/O!\n", DRIVER_NAME);
-    result = -ENOMEM;
-    goto err_ioremap;
+  // Request and map the I/O region
+  test_counter_data.regbase = devm_ioremap_resource(&pdev->dev, res);
+  if (IS_ERR(test_counter_data.regbase)) {
+    result = PTR_ERR(test_counter_data.regbase);
+    goto ret_devm_ioremmap_resource;
   }
+  test_counter_data.regsize = resource_size(res);
 
+  // Alocate char device
   result = alloc_chrdev_region(&test_counter_data.devnum, 0, 1, DRIVER_NAME);
   if (result) {
     pr_err("%s: Failed to allocate device number!\n", DRIVER_NAME);
@@ -189,32 +193,47 @@ static int __init test_counter_init(void) {
     goto ret_err_cdev_add;
   }
 
-  pr_info("[Driver] %s: initialized.\n", DRIVER_NAME);
+  dev_info(&pdev->dev, "initialized.\n");
   goto ret_ok;
 
 ret_err_cdev_add:
   unregister_chrdev_region(test_counter_data.devnum, 1);
 ret_err_alloc_chrdev_region:
-  iounmap(test_counter_data.regbase);
-err_ioremap:
-  release_mem_region(TEST_COUNTER_BASE, TEST_COUNTER_SIZE);
-ret_err_request_mem_region:
+ret_devm_ioremmap_resource:
+ret_platform_get_resource:
 ret_ok:
   return result;
 }
 
-static void __exit test_counter_exit(void) {
+static int test_counter_remove(struct platform_device *pdev) {
+  // TODO: confirm this:
+  // Note: no need, since we are using devm_ioremap_resource()
   cdev_del(&test_counter_data.cdev);
   unregister_chrdev_region(test_counter_data.devnum, 1);
-  iounmap(test_counter_data.regbase);
-  release_mem_region(TEST_COUNTER_BASE, TEST_COUNTER_SIZE);
-  pr_info("[Driver] %s: exiting.\n", DRIVER_NAME);
+  dev_info(&pdev->dev, "exiting.\n");
+  return 0;
 }
 
-module_init(test_counter_init);
-module_exit(test_counter_exit);
+static const struct of_device_id of_test_counter_match[] = {
+    {.compatible = "test-counter"},
+    {},
+};
+
+static struct platform_driver test_counter_driver = {
+    .driver =
+        {
+            .name = "test_counter",
+            .owner = THIS_MODULE,
+            .of_match_table = of_test_counter_match,
+        },
+    .probe = test_counter_probe,
+    .remove = test_counter_remove,
+};
+
+/* Replaces module_init() and module_exit() */
+module_platform_driver(test_counter_driver);
 
 MODULE_LICENSE("Dual MIT/GPL");
 MODULE_AUTHOR("IObundle");
 MODULE_DESCRIPTION("Test counter driver");
-MODULE_VERSION("0.2");
+MODULE_VERSION("0.3");

@@ -1,5 +1,6 @@
 obj-m += test_counter1.o
 obj-m += test_counter2.o
+obj-m += test_counter3.o
 
 LINUX_KERNEL_DIR = ../../../submodules/linux-5.15.98
 

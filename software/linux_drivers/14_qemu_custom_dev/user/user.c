@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-#include "test_counter2.h"
+#include "test_counter.h"
 
 uint32_t read_reg(int fd, uint32_t addr, uint32_t *value) {
   ssize_t ret = -1;
