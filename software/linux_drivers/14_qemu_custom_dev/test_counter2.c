@@ -28,11 +28,11 @@ static struct {
 } test_counter_data;
 
 static u32 test_counter_read_reg(u32 addr) {
-  return readl(test_counter_data.regbase + addr);
+  return ioread32(test_counter_data.regbase + addr);
 }
 
 static void test_counter_write_reg(u32 value, u32 addr) {
-  writel(value, test_counter_data.regbase + addr);
+  iowrite32(value, test_counter_data.regbase + addr);
 }
 
 static ssize_t test_counter_read(struct file *file, char __user *buf,
