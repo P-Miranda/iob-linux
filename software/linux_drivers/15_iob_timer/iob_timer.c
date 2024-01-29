@@ -83,8 +83,6 @@ static ssize_t iob_timer_read(struct file *file, char __user *buf, size_t count,
     return 0;
   }
 
-  // pr_info("[Driver] ADDR: 0x%x\tValue: 0x%x\n", (unsigned int)*ppos, value);
-
   // Read min between count and REG_SIZE
   if (size > count)
     size = count;
@@ -123,13 +121,6 @@ static ssize_t iob_timer_write(struct file *file, const char __user *buf,
   int size = 0;
   u32 value = 0;
 
-  // // Write min between size and count
-  // if (size > count)
-  //   size = count;
-  //
-  // if (copy_from_user(&kbuf, buf, size))
-  //   return -EFAULT;
-
   switch (*ppos) {
   case IOB_TIMER_RESET_ADDR:
     size = (IOB_TIMER_RESET_W >> 2); // bit to bytes
@@ -166,8 +157,6 @@ static ssize_t iob_timer_write(struct file *file, const char __user *buf,
  */
 loff_t iob_timer_llseek(struct file *filp, loff_t offset, int whence) {
   loff_t new_pos = -1;
-
-  // pr_info("[Driver] Lseek: offset %lld, whence %d\n", offset, whence);
 
   switch (whence) {
   case SEEK_SET:
@@ -235,7 +224,6 @@ static int iob_timer_probe(struct platform_device *pdev) {
   result = cdev_add(&iob_timer_data.cdev, iob_timer_data.devnum, 1);
   if (result) {
     pr_err("%s: Char device registration failed!\n", DRIVER_NAME);
-    unregister_chrdev_region(iob_timer_data.devnum, 1);
     goto ret_err_cdev_add;
   }
 
