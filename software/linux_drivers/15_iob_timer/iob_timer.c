@@ -1,7 +1,6 @@
 /* iob_timer.c: driver for iob_timer
  * using device platform. No hardcoded hardware address:
- * 1. setup driver: load lkm driver + add /dev/ file
- *      ./setup.sh
+ * 1. load driver: insmod iob_timer.ko
  * 2. run user app: ./user/user
  */
 
@@ -22,6 +21,7 @@ static struct {
   struct cdev cdev;
   void __iomem *regbase;
   resource_size_t regsize;
+  struct class *timer_class;
 } iob_timer_data;
 
 static u32 iob_timer_read_reg(u32 addr, u32 nbits) {
@@ -62,20 +62,18 @@ static ssize_t iob_timer_read(struct file *file, char __user *buf, size_t count,
   /* read value from register */
   switch (*ppos) {
   case IOB_TIMER_DATA_LOW_ADDR:
-    value =
-        iob_timer_read_reg(IOB_TIMER_DATA_LOW_ADDR, IOB_TIMER_DATA_LOW_W);
-    size = (IOB_TIMER_DATA_LOW_W >> 2); // bit to bytes
+    value = iob_timer_read_reg(IOB_TIMER_DATA_LOW_ADDR, IOB_TIMER_DATA_LOW_W);
+    size = (IOB_TIMER_DATA_LOW_W >> 3); // bit to bytes
     pr_info("[Driver] Read data low!\n");
     break;
   case IOB_TIMER_DATA_HIGH_ADDR:
-    value =
-        iob_timer_read_reg(IOB_TIMER_DATA_HIGH_ADDR, IOB_TIMER_DATA_HIGH_W);
-    size = (IOB_TIMER_DATA_HIGH_W >> 2); // bit to bytes
+    value = iob_timer_read_reg(IOB_TIMER_DATA_HIGH_ADDR, IOB_TIMER_DATA_HIGH_W);
+    size = (IOB_TIMER_DATA_HIGH_W >> 3); // bit to bytes
     pr_info("[Driver] Read data high!\n");
     break;
   case IOB_TIMER_VERSION_ADDR:
     value = iob_timer_read_reg(IOB_TIMER_VERSION_ADDR, IOB_TIMER_VERSION_W);
-    size = (IOB_TIMER_VERSION_W >> 2); // bit to bytes
+    size = (IOB_TIMER_VERSION_W >> 3); // bit to bytes
     pr_info("[Driver] Read version!\n");
     break;
   default:
@@ -100,7 +98,7 @@ static ssize_t iob_timer_read(struct file *file, char __user *buf, size_t count,
 static u32 char_to_u32(char *bytes, u32 nbytes) {
   u32 value = 0;
   while (nbytes--) {
-    value = (value << 8) | ((u32) bytes[nbytes]);
+    value = (value << 8) | ((u32)bytes[nbytes]);
   }
   return value;
 }
@@ -123,21 +121,21 @@ static ssize_t iob_timer_write(struct file *file, const char __user *buf,
 
   switch (*ppos) {
   case IOB_TIMER_RESET_ADDR:
-    size = (IOB_TIMER_RESET_W >> 2); // bit to bytes
+    size = (IOB_TIMER_RESET_W >> 3); // bit to bytes
     if (read_user_data(buf, size, &value))
       return -EFAULT;
     iob_timer_write_reg(value, IOB_TIMER_RESET_ADDR, IOB_TIMER_RESET_W);
     pr_info("[Driver] Reset iob_timer: 0x%x\n", value);
     break;
   case IOB_TIMER_ENABLE_ADDR:
-    size = (IOB_TIMER_ENABLE_W >> 2); // bit to bytes
+    size = (IOB_TIMER_ENABLE_W >> 3); // bit to bytes
     if (read_user_data(buf, size, &value))
       return -EFAULT;
     iob_timer_write_reg(value, IOB_TIMER_ENABLE_ADDR, IOB_TIMER_ENABLE_W);
     pr_info("[Driver] Enable iob_timer: 0x%x\n", value);
     break;
   case IOB_TIMER_SAMPLE_ADDR:         // sample counter
-    size = (IOB_TIMER_SAMPLE_W >> 2); // bit to bytes
+    size = (IOB_TIMER_SAMPLE_W >> 3); // bit to bytes
     if (read_user_data(buf, size, &value))
       return -EFAULT;
     iob_timer_write_reg(value, IOB_TIMER_SAMPLE_ADDR, IOB_TIMER_SAMPLE_W);
@@ -219,6 +217,20 @@ static int iob_timer_probe(struct platform_device *pdev) {
     goto ret_err_alloc_chrdev_region;
   }
 
+  // Create device class
+  if ((iob_timer_data.timer_class = class_create(THIS_MODULE, DRIVER_NAME)) ==
+      NULL) {
+    printk("Device class can not be created!\n");
+    goto class_error;
+  }
+
+  // create device file
+  if (device_create(iob_timer_data.timer_class, NULL, iob_timer_data.devnum,
+                    NULL, DRIVER_NAME) == NULL) {
+    printk("Can not create device file!\n");
+    goto file_error;
+  }
+
   cdev_init(&iob_timer_data.cdev, &iob_timer_fops);
 
   result = cdev_add(&iob_timer_data.cdev, iob_timer_data.devnum, 1);
@@ -231,6 +243,10 @@ static int iob_timer_probe(struct platform_device *pdev) {
   goto ret_ok;
 
 ret_err_cdev_add:
+  device_destroy(iob_timer_data.timer_class, iob_timer_data.devnum);
+file_error:
+  class_destroy(iob_timer_data.timer_class);
+class_error:
   unregister_chrdev_region(iob_timer_data.devnum, 1);
 ret_err_alloc_chrdev_region:
   // iounmap is managed by devm
@@ -242,6 +258,8 @@ ret_ok:
 
 static int iob_timer_remove(struct platform_device *pdev) {
   // Note: no need for iounmap, since we are using devm_ioremap_resource()
+  device_destroy(iob_timer_data.timer_class, iob_timer_data.devnum);
+  class_destroy(iob_timer_data.timer_class);
   cdev_del(&iob_timer_data.cdev);
   unregister_chrdev_region(iob_timer_data.devnum, 1);
   dev_info(&pdev->dev, "exiting.\n");
