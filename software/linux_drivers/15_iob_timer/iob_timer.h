@@ -2,6 +2,7 @@
 #define H_IOB_TIMER_H
 
 #define DRIVER_NAME "iob_timer"
+#define DRIVER_CLASS "iob_class"
 #define DEVICE_FILE "/dev/iob_timer"
 
 /* Register map */
@@ -25,4 +26,4 @@
 #define IOB_TIMER_DATA_HIGH_W 32
 #define IOB_TIMER_VERSION_W 16
 
-#endif
+#endif // H_IOB_TIMER_H
