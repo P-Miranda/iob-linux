@@ -1,4 +1,5 @@
 obj-m += iob_timer.o
+iob_timer-objs := main.o utils.o
 
 LINUX_KERNEL_DIR = ../../../submodules/linux-5.15.98
 
@@ -16,6 +17,7 @@ all: compile-driver compile-userapp add-to-rootfs
 
 compile-driver:
 	make -C $(LINUX_KERNEL_DIR) $(CROSS_COMPILE_OPS) M=$(PWD) modules
+	rm *.o *.mod.c *.mod *.symvers *.order .*
 
 compile-userapp:
 	make -C ./user all
