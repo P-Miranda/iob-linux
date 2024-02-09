@@ -23,4 +23,5 @@
 software/linux_drivers/*/*
 !software/linux_drivers/*/Makefile
 !software/linux_drivers/*/*.c
+!software/linux_drivers/*/*.h
 software/linux_drivers/*/*.mod.c
