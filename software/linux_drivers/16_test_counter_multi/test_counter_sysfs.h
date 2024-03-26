@@ -15,65 +15,71 @@ static ssize_t sysfs_enosys_store(struct device *dev, struct device_attribute *a
 }
 
 static ssize_t sysfs_id_show(struct device *dev, struct device_attribute *attr, char *buf) {
-	u32 value = iob_data_read_reg(test_counter_data.regbase, TEST_COUNTER_ID_ADDR, TEST_COUNTER_ID_W);
+    struct iob_data *t_counter_data = (struct iob_data*) dev->platform_data;
+	u32 value = iob_data_read_reg(t_counter_data->regbase, TEST_COUNTER_ID_ADDR, TEST_COUNTER_ID_W);
 	pr_info("Sysfs - Read: 0x%u\n", value);
 	return sprintf(buf, "%u", value);
 }
 
 static ssize_t sysfs_rst_store(struct device *dev, struct device_attribute *attr, const char __user *buf, size_t count) {
+    struct iob_data *t_counter_data = (struct iob_data*) dev->platform_data;
 	u32 value = 0;
-	if (!mutex_trylock(&test_counter_mutex)) {
+	if (!mutex_trylock(&t_counter_mutex)) {
 		pr_info("Another process is accessing the device\n");
 		return -EBUSY;
 	}
 	sscanf(buf, "%u", &value);
-	iob_data_write_reg(test_counter_data.regbase, value, TEST_COUNTER_RST_ADDR, TEST_COUNTER_RST_W);
-	mutex_unlock(&test_counter_mutex);
+	iob_data_write_reg(t_counter_data->regbase, value, TEST_COUNTER_RST_ADDR, TEST_COUNTER_RST_W);
+	mutex_unlock(&t_counter_mutex);
 	pr_info("Sysfs - Write: 0x%u\n", value);
 	return count;
 }
 
 static ssize_t sysfs_incr_store(struct device *dev, struct device_attribute *attr, const char __user *buf, size_t count) {
+    struct iob_data *t_counter_data = (struct iob_data*) dev->platform_data;
 	u32 value = 0;
-	if (!mutex_trylock(&test_counter_mutex)) {
+	if (!mutex_trylock(&t_counter_mutex)) {
 		pr_info("Another process is accessing the device\n");
 		return -EBUSY;
 	}
 	sscanf(buf, "%u", &value);
-	iob_data_write_reg(test_counter_data.regbase, value, TEST_COUNTER_INCR_ADDR, TEST_COUNTER_INCR_W);
-	mutex_unlock(&test_counter_mutex);
+	iob_data_write_reg(t_counter_data->regbase, value, TEST_COUNTER_INCR_ADDR, TEST_COUNTER_INCR_W);
+	mutex_unlock(&t_counter_mutex);
 	pr_info("Sysfs - Write: 0x%u\n", value);
 	return count;
 }
 
 static ssize_t sysfs_sample_store(struct device *dev, struct device_attribute *attr, const char __user *buf, size_t count) {
+    struct iob_data *t_counter_data = (struct iob_data*) dev->platform_data;
 	u32 value = 0;
-	if (!mutex_trylock(&test_counter_mutex)) {
+	if (!mutex_trylock(&t_counter_mutex)) {
 		pr_info("Another process is accessing the device\n");
 		return -EBUSY;
 	}
 	sscanf(buf, "%u", &value);
-	iob_data_write_reg(test_counter_data.regbase, value, TEST_COUNTER_SAMPLE_ADDR, TEST_COUNTER_SAMPLE_W);
-	mutex_unlock(&test_counter_mutex);
+	iob_data_write_reg(t_counter_data->regbase, value, TEST_COUNTER_SAMPLE_ADDR, TEST_COUNTER_SAMPLE_W);
+	mutex_unlock(&t_counter_mutex);
 	pr_info("Sysfs - Write: 0x%u\n", value);
 	return count;
 }
 
 static ssize_t sysfs_data_show(struct device *dev, struct device_attribute *attr, char *buf) {
-	u32 value = iob_data_read_reg(test_counter_data.regbase, TEST_COUNTER_DATA_ADDR, TEST_COUNTER_DATA_W);
+    struct iob_data *t_counter_data = (struct iob_data*) dev->platform_data;
+	u32 value = iob_data_read_reg(t_counter_data->regbase, TEST_COUNTER_DATA_ADDR, TEST_COUNTER_DATA_W);
 	pr_info("Sysfs - Read: 0x%u\n", value);
 	return sprintf(buf, "%u", value);
 }
 
 static ssize_t sysfs_set_store(struct device *dev, struct device_attribute *attr, const char __user *buf, size_t count) {
+    struct iob_data *t_counter_data = (struct iob_data*) dev->platform_data;
 	u32 value = 0;
-	if (!mutex_trylock(&test_counter_mutex)) {
+	if (!mutex_trylock(&t_counter_mutex)) {
 		pr_info("Another process is accessing the device\n");
 		return -EBUSY;
 	}
 	sscanf(buf, "%u", &value);
-	iob_data_write_reg(test_counter_data.regbase, value, TEST_COUNTER_SET_ADDR, TEST_COUNTER_SET_W);
-	mutex_unlock(&test_counter_mutex);
+	iob_data_write_reg(t_counter_data->regbase, value, TEST_COUNTER_SET_ADDR, TEST_COUNTER_SET_W);
+	mutex_unlock(&t_counter_mutex);
 	pr_info("Sysfs - Write: 0x%u\n", value);
 	return count;
 }
