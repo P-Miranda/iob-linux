@@ -15,6 +15,7 @@
 #include <linux/uaccess.h>
 
 #include "iob_class/iob_class_utils.h"
+#include "linux/mutex.h"
 #include "test_counter.h"
 
 #define NUM_DEVICES 2
@@ -30,11 +31,18 @@ static loff_t test_counter_llseek(struct file *, loff_t, int);
 static int test_counter_open(struct inode *, struct file *);
 static int test_counter_release(struct inode *, struct file *);
 
-static dev_t devnum = 0;
 DEFINE_MUTEX(t_counter_mutex);
-LIST_HEAD(t_counter_list);
-static int list_size = 0;
-static struct class *class = NULL;
+struct test_counter_driver {
+    dev_t devnum;
+    struct class *class;
+    struct list_head list;
+};
+
+static struct test_counter_driver tc_driver = {
+    .devnum = 0,
+    .class = NULL,
+    .list = LIST_HEAD_INIT(tc_driver.list),
+};
 
 #include "test_counter_sysfs.h"
 
@@ -71,10 +79,12 @@ static int test_counter_probe(struct platform_device *pdev) {
   int result = 0;
   struct iob_data *t_counter_data = NULL;
 
-  if (list_size >= NUM_DEVICES) {
+  mutex_lock(&t_counter_mutex);
+  if (MINOR(tc_driver.devnum) >= NUM_DEVICES) {
     pr_err("[Driver] %s: too many devices.\n", TEST_COUNTER_DRIVER_NAME);
     return -ENODEV;
   }
+  mutex_unlock(&t_counter_mutex);
 
   pr_info("[Driver] %s: probing.\n", TEST_COUNTER_DRIVER_NAME);
 
@@ -84,18 +94,11 @@ static int test_counter_probe(struct platform_device *pdev) {
     pr_err("[Driver]: Failed to allocate memory for iob_data struct!\n");
     return -ENOMEM;
   }
-  pr_info("[Driver] %s: alloc iob_data.\n", TEST_COUNTER_DRIVER_NAME);
 
   // add device to list
   mutex_lock(&t_counter_mutex);
-  list_add_tail(&t_counter_data->list, &t_counter_list);
-  list_size++;
+  list_add_tail(&t_counter_data->list, &tc_driver.list);
   mutex_unlock(&t_counter_mutex);
-  pr_info("[Driver] %s: add to list.\n", TEST_COUNTER_DRIVER_NAME);
-
-  // Associate iob_data to platform device
-  // access with t_counter_data = (struct iob_data*) pdev->dev.platform_data
-  pdev->dev.platform_data = t_counter_data;
 
   // Get the I/O region base address
   res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
@@ -113,32 +116,32 @@ static int test_counter_probe(struct platform_device *pdev) {
   }
   t_counter_data->regsize = resource_size(res);
 
-  pr_info("[Driver] %s: set regbase and regsize.\n", TEST_COUNTER_DRIVER_NAME);
-
   cdev_init(&t_counter_data->cdev, &test_counter_fops);
   t_counter_data->cdev.owner = THIS_MODULE;
-  t_counter_data->devnum = devnum;
-  devnum = MKDEV(MAJOR(devnum), MINOR(devnum) + 1);
+  t_counter_data->class = NULL;
+
+  mutex_lock(&t_counter_mutex);
+  t_counter_data->devnum = tc_driver.devnum;
+  tc_driver.devnum = MKDEV(MAJOR(tc_driver.devnum), MINOR(tc_driver.devnum) + 1);
+  mutex_unlock(&t_counter_mutex);
 
   result = cdev_add(&t_counter_data->cdev, t_counter_data->devnum, 1);
   if (result) {
     pr_err("%s: Char device registration failed!\n", TEST_COUNTER_DRIVER_NAME);
     goto r_cdev_add;
   }
-  pr_info("[Driver] %s: cdev.\n", TEST_COUNTER_DRIVER_NAME);
 
-  // Create device file
   t_counter_data->device =
-      device_create(class, NULL, t_counter_data->devnum, t_counter_data, "%s%d",
+      device_create(tc_driver.class, NULL, t_counter_data->devnum, t_counter_data, "%s%d",
                     TEST_COUNTER_DRIVER_NAME, MINOR(t_counter_data->devnum));
   if (t_counter_data->device == NULL) {
     printk("Can not create device file!\n");
     goto r_device;
   }
-  // Associate iob_data to device
-  t_counter_data->device->platform_data = t_counter_data;
 
-  pr_info("[Driver] %s: create device file.\n", TEST_COUNTER_DRIVER_NAME);
+  // Associate iob_data to device
+  pdev->dev.platform_data = t_counter_data;               // pdev functions
+  t_counter_data->device->platform_data = t_counter_data; // sysfs functions
 
   result = test_counter_create_device_attr_files(t_counter_data->device);
   if (result) {
@@ -146,10 +149,11 @@ static int test_counter_probe(struct platform_device *pdev) {
     goto r_dev_file;
   }
 
-  dev_info(&pdev->dev, "initialized.\n");
+  dev_info(&pdev->dev, "initialized with %d.\n", MINOR(t_counter_data->devnum));
   goto r_ok;
 
 r_dev_file:
+  device_destroy(t_counter_data->class, t_counter_data->devnum);
   cdev_del(&(t_counter_data->cdev));
 r_device:
 r_cdev_add:
@@ -164,17 +168,15 @@ r_ok:
 static int test_counter_remove(struct platform_device *pdev) {
   struct iob_data *t_counter_data = (struct iob_data *)pdev->dev.platform_data;
   test_counter_remove_device_attr_files(t_counter_data);
-
-  // remove from t_counter_list
-  mutex_lock(&t_counter_mutex);
-  list_del(&t_counter_data->list);
-  list_size--;
-  mutex_unlock(&t_counter_mutex);
-
   cdev_del(&(t_counter_data->cdev));
 
+  // remove from list
+  mutex_lock(&t_counter_mutex);
+  list_del(&t_counter_data->list);
+  mutex_unlock(&t_counter_mutex);
+
   // Note: no need for iounmap, since we are using devm_ioremap_resource()
-  dev_info(&pdev->dev, "exiting.\n");
+  dev_info(&pdev->dev, "remove.\n");
 
   return 0;
 }
@@ -184,7 +186,7 @@ static int __init test_counter_init(void) {
   pr_info("[Driver] %s: initializing.\n", TEST_COUNTER_DRIVER_NAME);
 
   // Alocate char device
-  ret = alloc_chrdev_region(&devnum, 0, NUM_DEVICES, TEST_COUNTER_DRIVER_NAME);
+  ret = alloc_chrdev_region(&tc_driver.devnum, 0, NUM_DEVICES, TEST_COUNTER_DRIVER_NAME);
   if (ret) {
     pr_err("%s: Failed to allocate device number!\n", TEST_COUNTER_DRIVER_NAME);
     goto r_exit;
@@ -192,7 +194,7 @@ static int __init test_counter_init(void) {
 
   // Create device class // todo: make a dummy driver just to create and own the
   // class: https://stackoverflow.com/a/16365027/8228163
-  if ((class = class_create(THIS_MODULE, TEST_COUNTER_DRIVER_CLASS)) == NULL) {
+  if ((tc_driver.class = class_create(THIS_MODULE, TEST_COUNTER_DRIVER_CLASS)) == NULL) {
     printk("Device class can not be created!\n");
     goto r_alloc_region;
   }
@@ -205,21 +207,28 @@ static int __init test_counter_init(void) {
   }
 
 r_class:
-  class_destroy(class);
+  class_destroy(tc_driver.class);
 r_alloc_region:
-  unregister_chrdev_region(devnum, NUM_DEVICES);
+  unregister_chrdev_region(tc_driver.devnum, NUM_DEVICES);
 r_exit:
   return ret;
 }
 
 static void __exit test_counter_exit(void) {
   pr_info("[Driver] %s: exiting.\n", TEST_COUNTER_DRIVER_NAME);
-  devnum = MKDEV(MAJOR(devnum), 0);
+
+  mutex_lock(&t_counter_mutex);
+  tc_driver.devnum = MKDEV(MAJOR(tc_driver.devnum), 0);
+  mutex_unlock(&t_counter_mutex);
+
   platform_driver_unregister(&test_counter_driver);
+
   pr_info("[Driver] %s: platform unregister.\n", TEST_COUNTER_DRIVER_NAME);
-  // class_destroy(class);
+  // class_destroy(tc_driver.class);
+
   pr_info("[Driver] %s: class destroy.\n", TEST_COUNTER_DRIVER_NAME);
-  unregister_chrdev_region(devnum, NUM_DEVICES);
+
+  unregister_chrdev_region(tc_driver.devnum, NUM_DEVICES);
   pr_info("[Driver] %s: chrdev region unregister.\n", TEST_COUNTER_DRIVER_NAME);
 }
 
@@ -239,7 +248,7 @@ static int test_counter_open(struct inode *inode, struct file *file) {
   }
 
   // assign t_counter_data to file private_data
-  list_for_each_entry(t_counter_data, &t_counter_list, list) {
+  list_for_each_entry(t_counter_data, &tc_driver.list, list) {
     if (t_counter_data->devnum == inode->i_rdev) {
       file->private_data = t_counter_data;
       return 0;
